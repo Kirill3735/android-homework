@@ -2,10 +2,11 @@ package com.example.serversimulator
 
 import androidx.compose.ui.graphics.Color
 
-// Цвета состояний
+//Цвета состояний
 object ServerColors {
     val Warning = Color(0xFFE65100)
     val Error = Color(0xFFB71C1C)
+    val Success = Color(0xFF2E7D32)
 
     private val Offline = Color(0xFFEEEEEE)
     private val Running = Color(0xFFE8F5E9)
@@ -18,7 +19,6 @@ object ServerColors {
         ServerStatus.OVERLOADED -> Overloaded
         ServerStatus.CRASHED -> Crashed
     }
-
     fun labelFor(status: ServerStatus): Color = when (status) {
         ServerStatus.OVERLOADED -> Warning
         ServerStatus.CRASHED -> Error

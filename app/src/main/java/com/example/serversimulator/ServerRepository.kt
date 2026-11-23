@@ -1,10 +1,17 @@
 package com.example.serversimulator
 
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.serialization.SerializationException
+import retrofit2.HttpException
+import java.io.IOException
+import kotlin.math.roundToInt
 
-class ServerRepository {
+private const val LOG_TAG = "ServerRepository"
+
+class ServerRepository(private val api: WeatherApi) {
 
     var servers by mutableStateOf(startServers())
         private set
@@ -13,6 +20,7 @@ class ServerRepository {
 
     fun server(id: Int): Server? = servers.find { it.id == id }
 
+    // Новый сервер в исходном состоянии появляется в начале списка
     fun add() {
         servers = listOf(Server(id = nextId++)) + servers
     }
@@ -27,17 +35,32 @@ class ServerRepository {
 
     fun addLoad(id: Int) = update(id) { it.addLoad() }
 
-    fun coolDown(id: Int) = update(id) { it.coolDown() }
+    fun coolDown(id: Int, outsideTemp: Int?) = update(id) { it.coolDown(outsideTemp) }
 
     fun updateVersion(id: Int) = update(id) { it.updateVersion() }
 
     fun reset(id: Int) = update(id) { it.reset() }
 
+    // Температура воздуха у дата-центра, °C.
+    suspend fun outsideTemperature(dataCenter: DataCenter): Int = try {
+        retryIO { api.currentWeather(dataCenter.latitude, dataCenter.longitude) }
+            .current.temperature.roundToInt()
+    } catch (e: IOException) {
+        throw WeatherLoadException(canRetry = true, e)
+    } catch (e: HttpException) {
+        throw WeatherLoadException(canRetry = e.code() >= NetworkConfig.HTTP_SERVER_ERROR, e)
+    } catch (e: SerializationException) {
+        Log.e(LOG_TAG, "Ответ сервиса погоды не совпал с DTO", e)
+        throw WeatherLoadException(canRetry = false, e)
+    }
+
+    // Меняется только сервер с этим id
     private fun update(id: Int, transform: (Server) -> Server) {
         servers = servers.map { if (it.id == id) transform(it) else it }
     }
 }
 
+// Стартовые серверы в разных состояниях
 fun startServers(): List<Server> {
     val scenarios: List<(Server) -> Server> = listOf(
         { it },

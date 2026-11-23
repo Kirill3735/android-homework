@@ -7,18 +7,21 @@ enum class ServerStatus(val label: String) {
     CRASHED("Авария (Сбой)")
 }
 
+// Один сервер: данные и правила его состояния
+//Неизменяемый: каждое действие возвращает новый Server
+
 data class Server(
     val id: Int,
     val name: String = ServerRules.defaultName(id),
     val status: ServerStatus = ServerStatus.OFFLINE,
     val cpuLoad: Int = ServerRules.OFFLINE_CPU,
     val temperature: Int = ServerRules.AMBIENT_TEMP,
-    val version: Int = ServerRules.INITIAL_VERSION
+    val version: Int = ServerRules.INITIAL_VERSION,
+    val dataCenter: DataCenter = DataCenter.forId(id)
 ) {
     val canRename: Boolean
         get() = status != ServerStatus.CRASHED
 
-   // После аварии сервер остаётся горячим и не запускается, пока не остынет.
     val canStart: Boolean
         get() = status == ServerStatus.OFFLINE &&
                 temperature < ServerRules.MAX_START_TEMP
@@ -49,7 +52,6 @@ data class Server(
 
     fun start(): Server {
         if (!canStart) return this
-        // Горячий сервер не охлаждается сам при запуске
         return copy(
             status = ServerStatus.RUNNING,
             cpuLoad = ServerRules.START_CPU,
@@ -65,23 +67,23 @@ data class Server(
         )
     }
 
-    fun coolDown(): Server {
+    fun coolDown(outsideTemp: Int? = null): Server {
         if (!canCoolDown) return this
+        val tempStep = ServerRules.coolTempStep(outsideTemp)
         return when (status) {
+            // Авария -> остановлен, но температура остаётся высокой
             ServerStatus.CRASHED -> copy(
                 status = ServerStatus.OFFLINE,
                 cpuLoad = ServerRules.OFFLINE_CPU,
                 temperature = ServerRules.POST_CRASH_TEMP
             )
             ServerStatus.OFFLINE -> copy(
-                temperature = (temperature - ServerRules.COOL_TEMP_STEP)
-                    .coerceAtLeast(ServerRules.AMBIENT_TEMP)
+                temperature = (temperature - tempStep).coerceAtLeast(ServerRules.AMBIENT_TEMP)
             )
             ServerStatus.RUNNING, ServerStatus.OVERLOADED -> withLoad(
                 cpu = (cpuLoad - ServerRules.COOL_CPU_STEP)
                     .coerceAtLeast(ServerRules.MIN_RUNNING_CPU),
-                temp = (temperature - ServerRules.COOL_TEMP_STEP)
-                    .coerceAtLeast(ServerRules.MIN_RUNNING_TEMP)
+                temp = (temperature - tempStep).coerceAtLeast(ServerRules.MIN_RUNNING_TEMP)
             )
         }
     }
@@ -94,7 +96,7 @@ data class Server(
         ).copy(version = version + 1)
     }
 
-    fun reset(): Server = Server(id = id, name = name)
+    fun reset(): Server = Server(id = id, name = name, dataCenter = dataCenter)
 
     private fun withLoad(cpu: Int, temp: Int): Server =
         copy(status = statusFor(cpu, temp), cpuLoad = cpu, temperature = temp)
