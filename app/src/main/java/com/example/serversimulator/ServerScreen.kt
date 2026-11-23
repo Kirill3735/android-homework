@@ -1,82 +1,147 @@
 package com.example.serversimulator
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.height
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 
-private val ColorOffline = Color(0xFFEEEEEE)
-private val ColorRunning = Color(0xFFE8F5E9)
-private val ColorOverloaded = Color(0xFFFFF3E0)
-private val ColorCrashed = Color(0xFFFFEBEE)
-private val ColorWarning = Color(0xFFE65100)
-private val ColorError = Color(0xFFB71C1C)
+private val IMAGE_HEIGHT = 140.dp
+private const val IMAGE_ALPHA_OFFLINE = 0.4f
 
-private fun backgroundFor(status: ServerStatus): Color = when (status) {
-    ServerStatus.OFFLINE -> ColorOffline
-    ServerStatus.RUNNING -> ColorRunning
-    ServerStatus.OVERLOADED -> ColorOverloaded
-    ServerStatus.CRASHED -> ColorCrashed
-}
-
+// Единственное место экрана сервера, которое знает о ViewModel
 @Composable
-fun ServerScreen(
+fun ServerRoute(
+    serverId: Int,
+    repo: ServerRepository,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    stateHolder: ServerStateHolder = remember { ServerStateHolder() }
+    contentPadding: PaddingValues = PaddingValues(0.dp)
 ) {
-    ServerPanel(
-        server = stateHolder.uiState,
-        onNameChange = stateHolder::rename,
-        onStart = stateHolder::start,
-        onAddLoad = stateHolder::addLoad,
-        onCoolDown = stateHolder::coolDown,
-        onUpdateVersion = stateHolder::updateVersion,
-        onReset = stateHolder::reset,
-        modifier = modifier
+    val viewModel = viewModel { ServerViewModel(serverId, repo) }
+    ServerScreen(
+        state = viewModel.uiState,
+        onNameChange = viewModel::onRename,
+        onStart = viewModel::onStart,
+        onAddLoad = viewModel::onAddLoad,
+        onCoolDown = viewModel::onCoolDown,
+        onUpdateVersion = viewModel::onUpdateVersion,
+        onReset = viewModel::onReset,
+        onRetryWeather = viewModel::onRetryWeather,
+        onBack = onBack,
+        modifier = modifier,
+        contentPadding = contentPadding
     )
 }
 
 @Composable
-fun ServerPanel(
-    server: ServerUiState,
+fun ServerScreen(
+    state: ServerUiState,
     onNameChange: (String) -> Unit,
     onStart: () -> Unit,
     onAddLoad: () -> Unit,
     onCoolDown: () -> Unit,
     onUpdateVersion: () -> Unit,
     onReset: () -> Unit,
-    modifier: Modifier = Modifier
+    onRetryWeather: () -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    contentPadding: PaddingValues = PaddingValues(0.dp)
+) {
+    val server = state.server
+    if (server == null) {
+        ServerNotFound(onBack = onBack, modifier = modifier, contentPadding = contentPadding)
+    } else {
+        ServerDetails(
+            server = server,
+            weather = state.weather,
+            onNameChange = onNameChange,
+            onStart = onStart,
+            onAddLoad = onAddLoad,
+            onCoolDown = onCoolDown,
+            onUpdateVersion = onUpdateVersion,
+            onReset = onReset,
+            onRetryWeather = onRetryWeather,
+            onBack = onBack,
+            modifier = modifier,
+            contentPadding = contentPadding
+        )
+    }
+}
+
+@Composable
+private fun ServerNotFound(
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    contentPadding: PaddingValues = PaddingValues(0.dp)
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(contentPadding)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(
+            text = "Сервер не найден",
+            style = MaterialTheme.typography.headlineSmall
+        )
+        OutlinedButton(onClick = onBack) {
+            Text("К списку серверов")
+        }
+    }
+}
+
+@Composable
+private fun ServerDetails(
+    server: Server,
+    weather: WeatherUiState,
+    onNameChange: (String) -> Unit,
+    onStart: () -> Unit,
+    onAddLoad: () -> Unit,
+    onCoolDown: () -> Unit,
+    onUpdateVersion: () -> Unit,
+    onReset: () -> Unit,
+    onRetryWeather: () -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    contentPadding: PaddingValues = PaddingValues(0.dp)
 ) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
-            .background(backgroundFor(server.status))
+            .background(ServerColors.backgroundFor(server.status))
     ) {
         Column(
-            modifier = modifier
+            modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
+                .padding(contentPadding)
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -86,9 +151,10 @@ fun ServerPanel(
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(140.dp)
-                    .alpha(if (server.status == ServerStatus.OFFLINE) 0.4f else 1f)
+                    .height(IMAGE_HEIGHT)
+                    .alpha(if (server.status == ServerStatus.OFFLINE) IMAGE_ALPHA_OFFLINE else 1f)
             )
+
             Text(text = "Сервер: ${server.name}", fontSize = 22.sp)
 
             TextField(
@@ -105,24 +171,30 @@ fun ServerPanel(
             Text(text = "Температура: ${server.temperature} °C", fontSize = 16.sp)
             Text(text = "Версия ПО: v${server.version}", fontSize = 16.sp)
 
+            OutsideTemperature(
+                dataCenter = server.dataCenter,
+                weather = weather,
+                onRetry = onRetryWeather
+            )
+
             if (server.status == ServerStatus.OVERLOADED) {
                 Text(
                     text = "Внимание! Перегрузка сервера. Обновление ПО заблокировано.",
-                    color = ColorWarning
+                    color = ServerColors.Warning
                 )
             }
             if (server.status == ServerStatus.CRASHED) {
                 Text(
                     text = "АВАРИЯ! Сервер упал от перегрева или предельной нагрузки. " +
                             "Охлаждение переведёт его в состояние «Остановлен».",
-                    color = ColorError
+                    color = ServerColors.Error
                 )
             }
             if (server.isTooHotToStart) {
                 Text(
                     text = "Сервер остановлен, но слишком горячий (${server.temperature} °C). " +
                             "Охладите его ниже ${ServerRules.MAX_START_TEMP} °C для запуска.",
-                    color = ColorWarning
+                    color = ServerColors.Warning
                 )
             }
 
@@ -170,26 +242,109 @@ fun ServerPanel(
             ) {
                 Text("Сбросить в исходное состояние")
             }
+
+            OutlinedButton(
+                onClick = onBack,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("К списку серверов")
+            }
         }
     }
 }
 
-@Preview(showBackground = true)
+// Данные из сети: загрузка, результат или ошибка. Остальной экран от них не зависит
 @Composable
-fun ServerPanelPreview() {
+private fun OutsideTemperature(
+    dataCenter: DataCenter,
+    weather: WeatherUiState,
+    onRetry: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(text = "Дата-центр: ${dataCenter.city}", fontSize = 16.sp)
+        when (weather) {
+            WeatherUiState.Loading -> Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                Text(text = "Загружаем температуру снаружи…")
+            }
+
+            is WeatherUiState.Content -> {
+                Text(text = "Температура снаружи: ${weather.temperature} °C", fontSize = 16.sp)
+                if (weather.isFreeCooling) {
+                    Text(
+                        text = "Свободное охлаждение: охлаждение сильнее на " +
+                                "${ServerRules.FREE_COOLING_BONUS} °C",
+                        color = ServerColors.Success
+                    )
+                }
+            }
+
+            is WeatherUiState.Error -> {
+                Text(
+                    text = if (weather.canRetry) {
+                        "Не удалось получить температуру снаружи. Сервер работает без неё."
+                    } else {
+                        "Не удалось прочитать ответ сервиса погоды. Сервер работает без неё."
+                    },
+                    color = ServerColors.Warning
+                )
+                if (weather.canRetry) {
+                    OutlinedButton(onClick = onRetry) {
+                        Text("Повторить")
+                    }
+                }
+            }
+        }
+    }
+}
+
+private val previewServer = Server(
+    id = 3,
+    status = ServerStatus.OVERLOADED,
+    cpuLoad = 80,
+    temperature = 80
+)
+
+@Composable
+private fun ServerScreenPreview(state: ServerUiState) {
     MaterialTheme {
-        ServerPanel(
-            server = ServerUiState(
-                status = ServerStatus.OVERLOADED,
-                cpuLoad = 80,
-                temperature = 80
-            ),
+        ServerScreen(
+            state = state,
             onNameChange = {},
             onStart = {},
             onAddLoad = {},
             onCoolDown = {},
             onUpdateVersion = {},
-            onReset = {}
+            onReset = {},
+            onRetryWeather = {},
+            onBack = {}
         )
     }
 }
+
+@Preview(showBackground = true, name = "Перегрузка, температура загружена")
+@Composable
+fun ServerScreenContentPreview() = ServerScreenPreview(
+    ServerUiState(previewServer, WeatherUiState.Content(temperature = -3))
+)
+
+@Preview(showBackground = true, name = "Загрузка температуры")
+@Composable
+fun ServerScreenLoadingPreview() = ServerScreenPreview(
+    ServerUiState(previewServer, WeatherUiState.Loading)
+)
+
+@Preview(showBackground = true, name = "Ошибка сети с повтором")
+@Composable
+fun ServerScreenErrorPreview() = ServerScreenPreview(
+    ServerUiState(previewServer, WeatherUiState.Error(canRetry = true))
+)
+
+@Preview(showBackground = true, name = "Сервер не найден")
+@Composable
+fun ServerScreenNotFoundPreview() = ServerScreenPreview(
+    ServerUiState(server = null)
+)

@@ -1,11 +1,9 @@
 package com.example.serversimulator
-
-
 object ServerRules {
-    const val DEFAULT_NAME = "Backend-01"
+    const val NAME_PREFIX = "Backend-"
+    const val NAME_NUMBER_WIDTH = 2
     const val INITIAL_VERSION = 1
 
-    // Температуры и нагрузка в исходном и остановленном состоянии
     const val AMBIENT_TEMP = 30
     const val OFFLINE_CPU = 0
     const val POST_CRASH_TEMP = 75
@@ -40,4 +38,18 @@ object ServerRules {
     const val OVERLOAD_TEMP_THRESHOLD = 70
     const val CRASH_CPU_THRESHOLD = 100
     const val CRASH_TEMP_THRESHOLD = 90
+
+    // Свободное охлаждение: если снаружи холодно, охлаждение сильнее
+    const val FREE_COOLING_MAX_OUTSIDE_TEMP = 5
+    const val FREE_COOLING_BONUS = 10
+
+    // outsideTemp == null, если температура снаружи ещё не загружена или не удалось её получить
+    fun isFreeCooling(outsideTemp: Int?): Boolean =
+        outsideTemp != null && outsideTemp <= FREE_COOLING_MAX_OUTSIDE_TEMP
+
+    fun coolTempStep(outsideTemp: Int?): Int =
+        if (isFreeCooling(outsideTemp)) COOL_TEMP_STEP + FREE_COOLING_BONUS else COOL_TEMP_STEP
+
+    fun defaultName(id: Int): String =
+        NAME_PREFIX + id.toString().padStart(NAME_NUMBER_WIDTH, '0')
 }
